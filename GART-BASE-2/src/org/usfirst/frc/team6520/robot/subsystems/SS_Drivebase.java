@@ -9,6 +9,8 @@ import edu.wpi.first.wpilibj.AnalogInput;
 import edu.wpi.first.wpilibj.CounterBase.EncodingType;
 import edu.wpi.first.wpilibj.DigitalInput;
 import edu.wpi.first.wpilibj.Encoder;
+import edu.wpi.first.wpilibj.PIDController;
+import edu.wpi.first.wpilibj.PIDOutput;
 import edu.wpi.first.wpilibj.SPI;
 import edu.wpi.first.wpilibj.SPI.Port;
 import edu.wpi.first.wpilibj.Spark;
@@ -19,7 +21,7 @@ import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 /**
  *
  */
-public class SS_Drivebase extends Subsystem {
+public class SS_Drivebase extends Subsystem implements PIDOutput {
 
     public Spark left = new Spark(0);
     public Spark right = new Spark(1);
@@ -31,25 +33,11 @@ public class SS_Drivebase extends Subsystem {
     
     public AHRS navX = new AHRS(SPI.Port.kMXP);
     
-//    public Pixy pixy = new Pixy(9, 0);
-    public PixyCam pixy = new PixyCam();
-    
-//    public int PIXY_I2C = 0x54;
-//    public PixyI2C pixy = new PixyI2C(0, argPixy, argPixyPacket, argPixyException, argValues)
-    
-    public int PPR = 20;
+    public int PPR = 80;
 
     public void initDefaultCommand() {
         // Set the default command for a subsystem here.
         //setDefaultCommand(new MySpecialCommand());
-    }
-//    
-//    public void leftDist(double centimeters){
-    
-    public void driveDist(double centimeters){
-    	while (leftEncoder.getRaw() < 360){
-//    		leftEncoder.
-    	}
     }
     
     public void driveTimer(double time){
@@ -60,15 +48,15 @@ public class SS_Drivebase extends Subsystem {
     	while (Timer.getFPGATimestamp() - start < time){
     		SmartDashboard.putNumber("time", Timer.getFPGATimestamp() - start);
     		if (leftEncoder.getRaw()/PPR - rightEncoder.getRaw()/PPR > acceptableDifference){
-        		left.set(-0.7);
+        		left.set(0.7);
         		right.set(0.5);
     		} 
     		else if (rightEncoder.getRaw()/PPR - leftEncoder.getRaw()/PPR > acceptableDifference){
-        		left.set(-0.5);
+        		left.set(0.5);
         		right.set(0.7);
     		}
     		else {
-        		left.set(-0.5);
+        		left.set(0.5);
         		right.set(0.5);
     		}
     		RobotMap.update();
@@ -94,7 +82,7 @@ public class SS_Drivebase extends Subsystem {
     	
     }
     
-    public void turnPID(double angle){
+    public void turnP(double angle){
     	navX.reset();
     	double heading = navX.getAngle();
     	double speed = 0.6;
@@ -111,53 +99,94 @@ public class SS_Drivebase extends Subsystem {
     	right.stopMotor();
     }
     
-    public AnalogInput analog = new AnalogInput(0);
-    public DigitalInput digital = new DigitalInput(9);
-    
-    public void pixy(){
-    	SmartDashboard.putNumber("pixy", pixy.getTargetX());
-//    	pixy.readPixyPacket();
-    }
-    
-    public int accErr = 5;
-    public void trackX(){
-    	double X = pixy.getTargetX();
-    	if (X < 160 - accErr){
-    		right.set(0.2);
-    		left.set(0.2);
-    	}
-    	else if (X > 160 + accErr){
-    		left.set(-0.2);
-    		right.set(-0.2);
-    	} else {
-    		left.stopMotor();
-    		right.stopMotor();
-    	}
-    }
-    
-//    public void turnEnc(int angle){
-//    	enc.reset();
-//    	int value = angle + 1;
-//    	while (value != angle){
-//    		value = (int) (enc.get()/500.0 * 360 % 360);
-//    		SmartDashboard.putNumber("enc", value);
-//    		pg.set(-0.6);
-//    	}
-//    	pg.stopMotor();
-//    }
-    
     public void followX (int diff){
     	if (Robot.vis.centerX < 160 - diff){
-        	left.set(-0.1);
+        	left.set(0.1);
         	right.set(-0.1);
     	} else if (Robot.vis.centerX > 160 + diff){
-        	left.set(0.1);
+        	left.set(-0.1);
         	right.set(0.1);
     	} else {
     		left.stopMotor();
     		right.stopMotor();
     	}
     }
+    
+    public void driveByEncoder(double distance){
+    	double speed = 0.5;
+    	double dist = distance * 100/(15.24 * Math.PI) * PPR;
+    	leftEncoder.reset();
+    	rightEncoder.reset();
+    	while (Math.abs((leftEncoder.get() + rightEncoder.get())/2 - dist) > 10){
+    		if ((leftEncoder.get() + rightEncoder.get())/2 < dist){
+    			left.set(speed);
+        		right.set(speed);
+    		} else if ((leftEncoder.get() + rightEncoder.get())/2 > dist){
+    			left.set(-speed);
+        		right.set(-speed);
+    		}
+    		SmartDashboard.putNumber("left", leftEncoder.get());
+    		SmartDashboard.putNumber("right", rightEncoder.get());
+    		SmartDashboard.putNumber("dist", dist);
+    	}
+    	left.stopMotor();
+    	right.stopMotor();
+    }
+    
+    public void driveByEncoderPID(double distance, double Kp, double Ki, double Kd){
+    	double speed = 0.5;
+    	double dist = distance * 100/(15.24 * Math.PI) * PPR;
+    	
+    	leftEncoder.reset();
+    	rightEncoder.reset();
+    	
+    	left.setInverted(true);
+    	
+    	PIDController pidLeft = new PIDController(Kp, Ki, Kd, leftEncoder, left);
+    	PIDController pidRight = new PIDController(Kp, Ki, Kd, rightEncoder, right);
+    	
+    	pidLeft.setOutputRange(-speed, speed);
+    	pidRight.setOutputRange(-speed, speed);
+    	
+    	pidLeft.setAbsoluteTolerance(10);
+    	pidRight.setAbsoluteTolerance(10);
+    	
+    	pidLeft.setSetpoint(dist);
+    	pidRight.setSetpoint(dist);
+    	
+    	pidLeft.enable();
+    	pidRight.enable();
+    	
+    	left.stopMotor();
+    	right.stopMotor();
+    }
+    
+    public void turnPID(double angle, double Kp, double Ki, double Kd){
+    	navX.reset();
+    	PIDController turnController = new PIDController(Kp, Ki, Kd, navX, this);
+		turnController.setInputRange(0, 360); // min 0m, max 4m
+		turnController.setOutputRange(-0.4, 0.4);
+		turnController.setAbsoluteTolerance(2);
+		turnController.setContinuous(true);
+		turnController.reset();
+		turnController.setSetpoint(angle);
+		turnController.enable();
+		
+		while (!turnController.onTarget()){
+			left.set(-turnController.get());
+			right.set(turnController.get());
+			SmartDashboard.putNumber("headinng", navX.getAngle());
+		}
+		left.stopMotor();
+		right.stopMotor();
+		SmartDashboard.putNumber("headinng", navX.getAngle());
+    }
+
+	@Override
+	public void pidWrite(double output) {
+		// TODO Auto-generated method stub
+		
+	}
 }
 
 

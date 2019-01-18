@@ -33,6 +33,7 @@ public class Robot extends TimedRobot {
 //		m_chooser.addDefault("Default Auto", new ExampleCommand());
 		// chooser.addObject("My Auto", new MyAutoCommand());
 		SmartDashboard.putData("Auto mode", m_chooser);
+		RobotMap.drivebase.left.setInverted(true);
 //		camera.setResolution(320, 240);
 	}
 
@@ -79,7 +80,10 @@ public class Robot extends TimedRobot {
 		if (m_autonomousCommand != null) {
 			m_autonomousCommand.cancel();
 		}
-		vis.vision();
+//		vis.vision();
+//		RobotMap.drivebase.driveByEncoder(4);
+//		RobotMap.drivebase.driveByEncoderPID(4, 0.5, 0, 0.2);
+		RobotMap.drivebase.turnPID(90, 0.013, 0, 0.027);
 	}
 
 	/**
